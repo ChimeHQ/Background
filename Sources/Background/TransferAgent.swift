@@ -55,6 +55,7 @@ public actor TransferAgent {
 	public typealias UploadHTTPResponse = Result<HTTPURLResponse, Error>
 	public typealias UploadHTTPHandler = @Sendable (String, UploadHTTPResponse) -> Void
 
+	public typealias TaskIdentifierProvider = @Sendable (URLSessionTask) -> String?
 
 	private let logger = Logger(subsystem: "com.chimehq.Background", category: "TransferAgent")
 	private var downloadHandlers = [String: DownloadHandler]()
@@ -77,19 +78,15 @@ public actor TransferAgent {
 		delegateQueue: nil
 	)
 
-	public var identifierProvider: @Sendable (URLSessionTask) throws -> String
+	private let taskIdentifierProvider: TaskIdentifierProvider
 	public var retryIntervalProvider: @Sendable (URLSessionTask) -> TimeInterval? = { _ in TransferAgent.defaultRetryInterval }
 
-	public init(configuration: URLSessionConfiguration) {
+	public init(
+		configuration: URLSessionConfiguration,
+		taskIdentifierProvider: @escaping TaskIdentifierProvider = { $0.taskDescription }
+	) {
 		self.sessionConfiguration = configuration
-
-		self.identifierProvider = { task in
-			guard let id = task.taskDescription else {
-				throw TransferAgentError.identifierUnavailable
-			}
-
-			return id
-		}
+		self.taskIdentifierProvider = taskIdentifierProvider
 	}
 }
 
@@ -102,7 +99,7 @@ extension TransferAgent {
 	private func taskComplete(_ task: URLSessionTask, _ error: Error?) {
 		guard let error = error else { return }
 
-		guard let identifier = try? self.identifierProvider(task) else {
+		guard let identifier = taskIdentifierProvider(task) else {
 			handleAbandonedTask(task, identifier: nil)
 			return
 		}
@@ -174,7 +171,7 @@ extension TransferAgent {
 
 		Task {
 			let (_, _, downloadTasks) = await session.tasks
-			let ids = Set(downloadTasks.compactMap { try? self.identifierProvider($0) })
+			let ids = Set(downloadTasks.compactMap { taskIdentifierProvider($0) })
 
 			if ids.contains(identifier) {
 				logger.debug("found existing task for \(identifier, privacy: .public)")
@@ -215,7 +212,7 @@ extension TransferAgent {
 	}
 
 	private func downloadFinished(_ downloadTask: URLSessionDownloadTask, _ location: URL) {
-		guard let identifier = try? self.identifierProvider(downloadTask) else {
+		guard let identifier = taskIdentifierProvider(downloadTask) else {
 			handleAbandonedTask(downloadTask, identifier: nil)
 
 			return
@@ -258,7 +255,7 @@ extension TransferAgent {
 
 		Task {
 			let (_, uploadTasks, _) = await session.tasks
-			let ids = Set(uploadTasks.compactMap { try? self.identifierProvider($0) })
+			let ids = Set(uploadTasks.compactMap { taskIdentifierProvider($0) })
 
 			if ids.contains(identifier) {
 				logger.debug("found existing task for \(identifier, privacy: .public)")
