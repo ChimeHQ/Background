@@ -46,14 +46,14 @@ public actor TransferAgent {
 	private static let defaultRetryInterval: TimeInterval = 5 * 60.0
 
 	public typealias DownloadResponse = Result<(URL, URLResponse), Error>
-	public typealias DownloadHandler = (String, DownloadResponse) -> Void
+	public typealias DownloadHandler = @Sendable (String, DownloadResponse) -> Void
 	public typealias DownloadHTTPResponse = Result<(URL, HTTPURLResponse), Error>
-	public typealias DownloadHTTPHandler = (String, DownloadHTTPResponse) -> Void
+	public typealias DownloadHTTPHandler = @Sendable (String, DownloadHTTPResponse) -> Void
 
 	public typealias UploadResponse = Result<URLResponse, Error>
-	public typealias UploadHandler = (String, UploadResponse) -> Void
+	public typealias UploadHandler = @Sendable (String, UploadResponse) -> Void
 	public typealias UploadHTTPResponse = Result<HTTPURLResponse, Error>
-	public typealias UploadHTTPHandler = (String, UploadHTTPResponse) -> Void
+	public typealias UploadHTTPHandler = @Sendable (String, UploadHTTPResponse) -> Void
 
 
 	private let logger = Logger(subsystem: "com.chimehq.Background", category: "TransferAgent")
@@ -77,8 +77,8 @@ public actor TransferAgent {
 		delegateQueue: nil
 	)
 
-	public var identifierProvider: (URLSessionTask) throws -> String
-	public var retryIntervalProvider: (URLSessionTask) -> TimeInterval? = { _ in TransferAgent.defaultRetryInterval }
+	public var identifierProvider: @Sendable (URLSessionTask) throws -> String
+	public var retryIntervalProvider: @Sendable (URLSessionTask) -> TimeInterval? = { _ in TransferAgent.defaultRetryInterval }
 
 	public init(configuration: URLSessionConfiguration) {
 		self.sessionConfiguration = configuration
