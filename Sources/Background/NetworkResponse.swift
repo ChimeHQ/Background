@@ -2,9 +2,9 @@ import Foundation
 
 public enum NetworkResponse {
 	case failed(NetworkResponseError)
-	case rejected
-	case retry
-	case success(Int)
+	case rejected(URLResponse)
+	case retry(URLResponse)
+	case success(URLResponse, Int)
 }
 
 extension NetworkResponse: CustomStringConvertible {
@@ -13,7 +13,7 @@ extension NetworkResponse: CustomStringConvertible {
 		case .failed(let e): return "failed (\(e))"
 		case .rejected: return "rejected"
 		case .retry: return "retry"
-		case .success(let code): return "success (\(code))"
+		case .success(_, let code): return "success (\(code))"
 		}
 	}
 }
@@ -51,11 +51,11 @@ extension NetworkResponse {
 		case 0..<200:
 			self = NetworkResponse.failed(NetworkResponseError.httpReponseInvalid)
 		case 200, 201, 202, 204:
-			self = NetworkResponse.success(code)
+			self = NetworkResponse.success(response, code)
 		case 408, 429, 500, 502, 503, 504:
-			self = NetworkResponse.retry
+			self = NetworkResponse.retry(response)
 		default:
-			self = NetworkResponse.rejected
+			self = NetworkResponse.rejected(response)
 		}
 	}
 

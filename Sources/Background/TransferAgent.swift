@@ -107,8 +107,12 @@ extension TransferAgent {
 		let response = NetworkResponse(task: task, error: error)
 
 		switch response {
-		case .success:
-			// handled by the task-specific delegate call
+		case let .success(urlResponse, _):
+			if task is URLSessionUploadTask {
+				relayUploadResponse(.success(urlResponse), for: identifier, task: task)
+			}
+
+			// other cases handled by the task-specific delegate call
 			break
 		case let .failed(error):
 			relayError(error, for: identifier, task: task)
@@ -126,7 +130,7 @@ extension TransferAgent {
 		case is URLSessionDownloadTask:
 			relayDownloadResponse(.failure(error), for: identifier, task: task)
 		case is URLSessionUploadTask:
-			break
+			relayUploadResponse(.failure(error), for: identifier, task: task)
 		default:
 			preconditionFailure("Only upload and download tasks should be possible")
 		}
@@ -273,5 +277,16 @@ extension TransferAgent {
 
 			task.resume()
 		}
+	}
+
+	private func relayUploadResponse(_ response: UploadResponse, for identifier: String, task: URLSessionTask) {
+		logger.info("completed upload task: \(identifier, privacy: .public)")
+
+		guard let handler = uploadHandlers[identifier] else {
+			self.handleAbandonedTask(task, identifier: identifier)
+			return
+		}
+
+		handler(identifier, response)
 	}
 }
