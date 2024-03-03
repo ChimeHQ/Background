@@ -162,7 +162,7 @@ extension TransferAgent {
 	public func beginDownload(
 		with request: URLRequest,
 		identifier: String,
-		configureTask: @escaping (URLSessionDownloadTask) -> Void = { _ in },
+		configureTask: @escaping @Sendable (URLSessionDownloadTask) -> Void = { _ in },
 		handler: @escaping DownloadHandler
 	) {
 		precondition(downloadHandlers[identifier] == nil)
@@ -194,7 +194,7 @@ extension TransferAgent {
 	public func beginHTTPDownload(
 		with request: URLRequest,
 		identifier: String,
-		configureTask: @escaping (URLSessionDownloadTask) -> Void = { _ in },
+		configureTask: @escaping @Sendable (URLSessionDownloadTask) -> Void = { _ in },
 		handler: @escaping DownloadHTTPHandler
 	) {
 		beginDownload(with: request, identifier: identifier, configureTask: configureTask) { _, response in
@@ -246,7 +246,7 @@ extension TransferAgent {
 		at url: URL,
 		with request: URLRequest,
 		identifier: String,
-		configureTask: @escaping (URLSessionUploadTask) -> Void = { _ in },
+		configureTask: @escaping @Sendable (URLSessionUploadTask) -> Void = { _ in },
 		handler: @escaping UploadHandler
 	) {
 		precondition(uploadHandlers[identifier] == nil)
