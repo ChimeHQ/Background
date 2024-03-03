@@ -43,14 +43,22 @@ enum TransferAgentError: Error {
 }
 
 public actor TransferAgent {
-	public typealias Response = Result<(URL, URLResponse), Error>
-	public typealias Handler = (String, Response) -> Void
+	private static let defaultRetryInterval: TimeInterval = 5 * 60.0
 
-	public typealias HTTPResponse = Result<(URL, HTTPURLResponse), Error>
-	public typealias HTTPHandler = (String, HTTPResponse) -> Void
+	public typealias DownloadResponse = Result<(URL, URLResponse), Error>
+	public typealias DownloadHandler = (String, DownloadResponse) -> Void
+	public typealias DownloadHTTPResponse = Result<(URL, HTTPURLResponse), Error>
+	public typealias DownloadHTTPHandler = (String, DownloadHTTPResponse) -> Void
+
+	public typealias UploadResponse = Result<URLResponse, Error>
+	public typealias UploadHandler = (String, UploadResponse) -> Void
+	public typealias UploadHTTPResponse = Result<HTTPURLResponse, Error>
+	public typealias UploadHTTPHandler = (String, UploadHTTPResponse) -> Void
+
 
 	private let logger = Logger(subsystem: "com.chimehq.Background", category: "TransferAgent")
-	private var downloadHandlers = [String: Handler]()
+	private var downloadHandlers = [String: DownloadHandler]()
+	private var uploadHandlers = [String: UploadHandler]()
 	private var pendingEvents = true
 	private var sessionCompletionHandler: @Sendable () -> Void = {}
 	private let sessionConfiguration: URLSessionConfiguration
@@ -70,6 +78,7 @@ public actor TransferAgent {
 	)
 
 	public var identifierProvider: (URLSessionTask) throws -> String
+	public var retryIntervalProvider: (URLSessionTask) -> TimeInterval? = { _ in TransferAgent.defaultRetryInterval }
 
 	public init(configuration: URLSessionConfiguration) {
 		self.sessionConfiguration = configuration
@@ -98,6 +107,24 @@ extension TransferAgent {
 			return
 		}
 
+		let response = NetworkResponse(task: task, error: error)
+
+		switch response {
+		case .success:
+			// handled by the task-specific delegate call
+			break
+		case let .failed(error):
+			relayError(error, for: identifier, task: task)
+		case .rejected:
+			relayError(NetworkResponseError.requestInvalid, for: identifier, task: task)
+		case .retry:
+			let interval = retryIntervalProvider(task)
+
+			relayError(NetworkResponseError.transientFailure(interval), for: identifier, task: task)
+		}
+	}
+
+	private func relayError(_ error: Error, for identifier: String, task: URLSessionTask) {
 		switch task {
 		case is URLSessionDownloadTask:
 			relayDownloadResponse(.failure(error), for: identifier, task: task)
@@ -124,6 +151,14 @@ extension TransferAgent {
 			}
 		}
 	}
+
+	public func handleBackgroundSessionEvents(_ completion: @escaping () -> Void) {
+		Task {
+			await finishedEvents()
+
+			completion()
+		}
+	}
 }
 
 extension TransferAgent {
@@ -131,7 +166,7 @@ extension TransferAgent {
 		with request: URLRequest,
 		identifier: String,
 		configureTask: @escaping (URLSessionDownloadTask) -> Void = { _ in },
-		handler: @escaping Handler
+		handler: @escaping DownloadHandler
 	) {
 		precondition(downloadHandlers[identifier] == nil)
 
@@ -163,7 +198,7 @@ extension TransferAgent {
 		with request: URLRequest,
 		identifier: String,
 		configureTask: @escaping (URLSessionDownloadTask) -> Void = { _ in },
-		handler: @escaping HTTPHandler
+		handler: @escaping DownloadHTTPHandler
 	) {
 		beginDownload(with: request, identifier: identifier, configureTask: configureTask) { _, response in
 			switch response {
@@ -188,25 +223,58 @@ extension TransferAgent {
 
 		logger.info("completed download task: \(identifier, privacy: .public)")
 
-		do {
-			guard let response = downloadTask.response else {
-				throw TransferAgentError.noResponse
-			}
+		guard let response = downloadTask.response else {
+			relayDownloadResponse(.failure(TransferAgentError.noResponse), for: identifier, task: downloadTask)
 
-			relayDownloadResponse(.success((location, response)), for: identifier, task: downloadTask)
-		} catch {
-			relayDownloadResponse(.failure(error), for: identifier, task: downloadTask)
+			return
 		}
+
+		relayDownloadResponse(.success((location, response)), for: identifier, task: downloadTask)
 
 		try? FileManager.default.removeItem(at: location)
 	}
 
-	private func relayDownloadResponse(_ response: Response, for identifier: String, task: URLSessionTask) {
+	private func relayDownloadResponse(_ response: DownloadResponse, for identifier: String, task: URLSessionTask) {
 		guard let handler = downloadHandlers[identifier] else {
 			self.handleAbandonedTask(task, identifier: identifier)
 			return
 		}
 
 		handler(identifier, response)
+	}
+}
+
+extension TransferAgent {
+	public func beginUpload(
+		at url: URL,
+		with request: URLRequest,
+		identifier: String,
+		configureTask: @escaping (URLSessionUploadTask) -> Void = { _ in },
+		handler: @escaping UploadHandler
+	) {
+		precondition(uploadHandlers[identifier] == nil)
+
+		uploadHandlers[identifier] = handler
+
+		Task {
+			let (_, uploadTasks, _) = await session.tasks
+			let ids = Set(uploadTasks.compactMap { try? self.identifierProvider($0) })
+
+			if ids.contains(identifier) {
+				logger.debug("found existing task for \(identifier, privacy: .public)")
+				return
+			}
+
+			let task = self.session.uploadTask(with: request, fromFile: url)
+
+			configureTask(task)
+			if task.taskDescription != nil {
+				logger.warning("taskDescription field is in use and will be overwritten \(identifier, privacy: .public)")
+			}
+
+			task.taskDescription = identifier
+
+			task.resume()
+		}
 	}
 }
