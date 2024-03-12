@@ -1,10 +1,20 @@
 import Foundation
 
-public enum NetworkResponse {
+public enum NetworkResponseError: Error {
+	case protocolError(Error)
+	case noResponseOrError
+	case noHTTPResponse(URLResponse)
+	case httpReponseInvalid
+	case requestInvalid
+	case missingOriginalRequest
+	case transientFailure(TimeInterval?)
+}
+
+public enum NetworkResponse: Sendable {
 	case failed(NetworkResponseError)
-	case rejected(URLResponse)
-	case retry(URLResponse)
-	case success(URLResponse, Int)
+	case rejected
+	case retry(HTTPURLResponse)
+	case success(HTTPURLResponse)
 }
 
 extension NetworkResponse: CustomStringConvertible {
@@ -13,19 +23,9 @@ extension NetworkResponse: CustomStringConvertible {
 		case .failed(let e): return "failed (\(e))"
 		case .rejected: return "rejected"
 		case .retry: return "retry"
-		case .success(_, let code): return "success (\(code))"
+		case let .success(response): return "success (\(response.statusCode))"
 		}
 	}
-}
-
-public enum NetworkResponseError: Error {
-	case protocolError(Error)
-	case noResponseOrError
-	case noHTTPResponse
-	case httpReponseInvalid
-	case requestInvalid
-	case missingOriginalRequest
-	case transientFailure(TimeInterval?)
 }
 
 extension NetworkResponse {
@@ -41,7 +41,7 @@ extension NetworkResponse {
 		}
 
 		guard let httpResponse = response as? HTTPURLResponse else {
-			self = NetworkResponse.failed(NetworkResponseError.noHTTPResponse)
+			self = NetworkResponse.failed(NetworkResponseError.noHTTPResponse(response))
 			return
 		}
 
@@ -51,11 +51,11 @@ extension NetworkResponse {
 		case 0..<200:
 			self = NetworkResponse.failed(NetworkResponseError.httpReponseInvalid)
 		case 200, 201, 202, 204:
-			self = NetworkResponse.success(response, code)
+			self = NetworkResponse.success(httpResponse)
 		case 408, 429, 500, 502, 503, 504:
-			self = NetworkResponse.retry(response)
+			self = NetworkResponse.retry(httpResponse)
 		default:
-			self = NetworkResponse.rejected(response)
+			self = NetworkResponse.rejected
 		}
 	}
 
@@ -64,27 +64,14 @@ extension NetworkResponse {
 	}
 }
 
-extension HTTPURLResponse {
-	/// Returns the Retry-After HTTP header as a TimeInterval, if present
-	public var retryAfterInterval: TimeInterval? {
-		allHeaderFields["Retry-After"]
-			.flatMap { $0 as? String }
-			.flatMap { Int($0) }
-			.map { TimeInterval($0) }
-	}
-}
+extension URLResponse {
+	public var httpResponse: HTTPURLResponse {
+		get throws {
+			guard let httpResp = self as? HTTPURLResponse else {
+				throw NetworkResponseError.noHTTPResponse(self)
+			}
 
-extension URLSessionTask {
-	/// Returns the task's response Retry-After HTTP header as a TimeInterval, if present
-	public var retryAfterInterval: TimeInterval? {
-		guard let response else {
-			return nil
+			return httpResp
 		}
-
-		guard let httpResponse = response as? HTTPURLResponse else {
-			return nil
-		}
-
-		return httpResponse.retryAfterInterval
 	}
 }
