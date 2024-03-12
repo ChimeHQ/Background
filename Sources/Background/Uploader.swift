@@ -8,7 +8,7 @@ public struct BackgroundTaskConfiguration {
 
 	public init(
 		getIdentifier: @escaping (URLSessionTask) -> String?,
-		prepareTask: @escaping (URLSessionTask, URLRequest, String) -> Void
+		prepareTask: @escaping (URLSessionTask, URLRequest, String) -> Void = { _, _, _ in }
 	) {
 		self.getIdentifier = getIdentifier
 		self.prepareTask = prepareTask
@@ -38,11 +38,11 @@ public actor Uploader {
 
 	public init(
 		sessionConfiguration: URLSessionConfiguration,
-		taskConfiguration: BackgroundTaskConfiguration
+		taskConfigurationProvider: @Sendable () -> BackgroundTaskConfiguration
 	) {
 		let proxy = URLSessionDelegateProxy()
 
-		self.taskInterface = taskConfiguration
+		self.taskInterface = taskConfigurationProvider()
 		self.session = URLSession(configuration: sessionConfiguration, delegate: proxy, delegateQueue: nil)
 
 		proxy.taskCompletedHandler = { task, error in
@@ -50,6 +50,18 @@ public actor Uploader {
 				await self.taskFinished(task, with: error)
 			}
 		}
+	}
+
+	public init(
+		sessionConfiguration: URLSessionConfiguration,
+		identifierProvider: @escaping @Sendable (URLSessionTask) -> String?
+	) {
+		self.init(
+			sessionConfiguration: sessionConfiguration,
+			taskConfigurationProvider: {
+				BackgroundTaskConfiguration(getIdentifier: identifierProvider)
+			}
+		)
 	}
 
 	private var activeTasks: Set<String> {
