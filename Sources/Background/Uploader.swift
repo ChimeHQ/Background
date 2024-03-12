@@ -25,8 +25,7 @@ public struct BackgroundTaskConfiguration {
 /// Manages background uploads
 public actor Uploader {
 	public typealias Identifier = String
-	public typealias Response = Result<URLResponse, Error>
-	public typealias Handler = @Sendable (Identifier, Response) -> Void
+	public typealias Handler = @Sendable (Identifier, Result<URLResponse, Error>) -> Void
 
 	public typealias TaskIdentifierProvider = @Sendable (URLSessionTask) -> String?
 	public typealias PrepareTask = @Sendable (URLSessionUploadTask) -> Void
@@ -90,7 +89,6 @@ extension Uploader {
 		handler: @escaping Handler
 	) {
 		precondition(handlers[identifier] == nil)
-
 		handlers[identifier] = handler
 
 		Task<Void, Never> {
@@ -140,7 +138,7 @@ extension Uploader {
 		uploadFinished(with: response, identifier: identifier)
 	}
 
-	private func uploadFinished(with response: Response, identifier: Identifier) {
+	private func uploadFinished(with response: Result<URLResponse, Error>, identifier: Identifier) {
 		guard let handler = handlers[identifier] else {
 			logger.info("no handler found for \(identifier, privacy: .public)")
 
