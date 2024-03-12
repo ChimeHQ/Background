@@ -2,20 +2,22 @@ import Foundation
 import OSLog
 
 /// Interface to long-running URLSessionTask objects.
-public struct BackgroundTaskConfiguration {
-	public let getIdentifier: (URLSessionTask) -> String?
-	public let prepareTask: (URLSessionTask, URLRequest, String) -> Void
+public struct BackgroundTaskConfiguration: Sendable {
+	public typealias IdentifierProvider = @Sendable (URLSessionTask) -> String?
+	public typealias PrepareTask = @Sendable (URLSessionTask, URLRequest, String) -> Void
+
+	public let getIdentifier: IdentifierProvider
+	public let prepareTask: PrepareTask
 
 	public init(
-		getIdentifier: @escaping (URLSessionTask) -> String?,
-		prepareTask: @escaping (URLSessionTask, URLRequest, String) -> Void = { _, _, _ in }
+		getIdentifier: @escaping IdentifierProvider,
+		prepareTask: @escaping PrepareTask = { _, _, _ in }
 	) {
 		self.getIdentifier = getIdentifier
 		self.prepareTask = prepareTask
 	}
 
 	/// Stores a persistent identifier within the `URLSessionTask`'s `taskDescription` property.
-	@MainActor
 	public static let taskDescriptionCoder = BackgroundTaskConfiguration(
 		getIdentifier: { $0.taskDescription },
 		prepareTask: { $0.taskDescription = $2 }
@@ -27,9 +29,6 @@ public actor Uploader {
 	public typealias Identifier = String
 	public typealias Handler = @Sendable (Identifier, Result<URLResponse, Error>) -> Void
 
-	public typealias TaskIdentifierProvider = @Sendable (URLSessionTask) -> String?
-	public typealias PrepareTask = @Sendable (URLSessionUploadTask) -> Void
-
 	private let session: URLSession
 	private var handlers = [Identifier: Handler]()
 	private let logger = Logger(subsystem: "com.chimehq.Background", category: "Uploader")
@@ -37,11 +36,11 @@ public actor Uploader {
 
 	public init(
 		sessionConfiguration: URLSessionConfiguration,
-		taskConfigurationProvider: @Sendable () -> BackgroundTaskConfiguration
+		taskConfiguration: BackgroundTaskConfiguration = BackgroundTaskConfiguration.taskDescriptionCoder
 	) {
 		let proxy = URLSessionDelegateProxy()
 
-		self.taskInterface = taskConfigurationProvider()
+		self.taskInterface = taskConfiguration
 		self.session = URLSession(configuration: sessionConfiguration, delegate: proxy, delegateQueue: nil)
 
 		proxy.taskCompletedHandler = { task, error in
@@ -53,13 +52,13 @@ public actor Uploader {
 
 	public init(
 		sessionConfiguration: URLSessionConfiguration,
-		identifierProvider: @escaping @Sendable (URLSessionTask) -> String?
+		identifierProvider: @escaping BackgroundTaskConfiguration.IdentifierProvider
 	) {
 		self.init(
 			sessionConfiguration: sessionConfiguration,
-			taskConfigurationProvider: {
-				BackgroundTaskConfiguration(getIdentifier: identifierProvider)
-			}
+			taskConfiguration: BackgroundTaskConfiguration(
+				getIdentifier: identifierProvider
+			)
 		)
 	}
 

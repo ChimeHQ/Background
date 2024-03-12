@@ -14,9 +14,18 @@ dependencies: [
 Uploading files:
 
 ```swift
-improt Background
+import Foundation
 
-let uploader = Uplodaer()
+import Background
+
+let config = URLSessionConfiguration.background(withIdentifier: "com.my.background-id")
+let uploader = Uploader(
+    sessionConfiguration: config,
+    identifierProvider: { task in 
+        task.taskDescriptor
+    }
+)
+
 ```
 
 Downloading data:
