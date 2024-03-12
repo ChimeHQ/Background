@@ -62,6 +62,15 @@ extension NetworkResponse {
 	public init(task: URLSessionTask, error: Error? = nil) {
 		self.init(response: task.response, error: error)
 	}
+
+	public init(with result: Result<URLResponse, Error>) {
+		switch result {
+		case let .success(response):
+			self.init(response: response, error: nil)
+		case let .failure(error):
+			self.init(response: nil, error: error)
+		}
+	}
 }
 
 extension URLResponse {
