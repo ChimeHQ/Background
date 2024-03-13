@@ -82,7 +82,7 @@ extension Uploader {
 	/// - Warning: there is no guarantee that `handler` is called during this current processes life-cycle. It may only be called on a future launch.
 	///
 	public func beginUpload(
-		at url: URL,
+		of url: URL,
 		with request: URLRequest,
 		identifier: String,
 		handler: @escaping Handler
@@ -114,15 +114,29 @@ extension Uploader {
 	///
 	/// - Warning: there is no guarantee this function returns during this current processes life-cycle. It may only produce a result on a future launch.
 	///
-	public func upload(
+	public func uploadFile(
 		at url: URL,
 		with request: URLRequest,
 		identifier: String
 	) async throws -> URLResponse {
 		try await withCheckedThrowingContinuation { continuation in
-			beginUpload(at: url, with: request, identifier: identifier) { _, response in
+			beginUpload(of: url, with: request, identifier: identifier) { _, response in
 				continuation.resume(with: response)
 			}
+		}
+	}
+
+	public func networkResponse(
+		from request: URLRequest,
+		uploading url: URL,
+		with identifier: String
+	) async -> NetworkResponse {
+		do {
+			let response = try await uploadFile(at: url, with: request, identifier: identifier)
+
+			return NetworkResponse(response: response)
+		} catch {
+			return NetworkResponse(response: nil, error: error)
 		}
 	}
 
