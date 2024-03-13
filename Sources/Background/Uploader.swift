@@ -64,6 +64,13 @@ public actor Uploader {
 
 	private var activeTasks: Set<String> {
 		get async {
+            // force a turn of the main runloop, which I have found to sometimes be necessary for this to actually work
+            await withCheckedContinuation { continuation in
+                DispatchQueue.main.async {
+                    continuation.resume()
+                }
+            }
+
 			let (_, uploadTasks, _) = await session.tasks
 			let ids = uploadTasks.compactMap { taskInterface.getIdentifier($0) }
 
@@ -126,6 +133,7 @@ extension Uploader {
 		}
 	}
 
+    /// Start the upload task and return a NetworkResponse when complete.
 	public func networkResponse(
 		from request: URLRequest,
 		uploading url: URL,
