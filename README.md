@@ -18,18 +18,18 @@ dependencies: [
 
 ## Concept
 
-URLSession's background upload and download facilities are relatively straightforward to get started with. But, they are surprisingly difficult to manage. The core challange is an operation could start and/or complete while your process isn't even running. You cannot just wait for a completion handler or `await` call, because they might never happen. This usually means you have to involve peristent storage to juggle state across process launches.
+[`URLSession`](https://developer.apple.com/documentation/foundation/urlsession)'s background upload and download facilities are relatively straightforward to get started with. But, they are surprisingly difficult to manage. The core challange is an operation could start and/or complete while your process isn't even running. You cannot just wait for a completion handler or `await` call. This usually means you have to involve peristent storage to juggle state across process launches.
 
 You also typically need to make use of system-provided API to reconnect your session to any work that has happened between launches. This can be done a few different ways, depending on your type of project and how you'd like your system to work.
 
 - [`WidgetConfiguration.onBackgroundSessionEvents(matching:_:)`](https://developer.apple.com/documentation/swiftui/widgetconfiguration/onbackgroundurlsessionevents(matching:_:)-2e152)
 - [`UIApplicationDelegate.application(_:handleEventsForBackgroundURLSession:completionHandler:)`](https://developer.apple.com/documentation/uikit/uiapplicationdelegate/1622941-application)
 
-Because persistent state is involved and networking operations might already be in-progress, `Uploader` and `Downloader` support restarting operations on start. When your process starts up, you should restart any operations. They will take care of determining if the operations need to be actually started or just reconnected to existing work.
+Because persistent state is involved and networking operations might already be in-progress, the `Uploader` and `Downloader` types support restarting operations. Your job is to track that in-flight work. You can then just restart any work that hasn't yet completed on launch using the `Uploader` or `Downloader` types. They will take care of determining if the operations need to be actually started or just reconnected to existing work.
 
 ## Usage
 
-Uploading files:
+### Uploading
 
 ```swift
 import Foundation
@@ -65,7 +65,7 @@ Task<Void, Never> {
 }
 ```
 
-Downloading:
+### Downloading
 
 ```swift
 import Foundation
@@ -78,29 +78,31 @@ let request = URLRequest(url: URL(string: "https://myurl")!)
 let identifier = "some-stable-id-appropriate-for-the-file"
 
 Task<Void, Never> {
-	// remember, this await may not return during the processes entire lifecycle!
-	let response = await downloader.networkResponse(from: request, with: identifier)
+    // remember, this await may not return during the processes entire lifecycle!
+    let response = await downloader.networkResponse(from: request, with: identifier)
 
-	switch response {
-	case .rejected:
-		// the server did not like the request
-		break
-	case let .retry(urlResponse):
-		let interval = urlResponse.retryAfterInterval ?? 60.0
+    switch response {
+    case .rejected:
+        // the server did not like the request
+        break
+    case let .retry(urlResponse):
+        let interval = urlResponse.retryAfterInterval ?? 60.0
 
-		// transient failure, could retry with interval if that makes sense
-		break
-	case let .failed(error):
-		// failed and a retry is unlikely to succeed
-		break
-	case let .success(url, urlResponse):
-		// download completed successfully at url
-		break
-	}
+        // transient failure, could retry with interval if that makes sense
+        break
+    case let .failed(error):
+        // failed and a retry is unlikely to succeed
+        break
+    case let .success(url, urlResponse):
+        // download completed successfully at url
+        break
+    }
 }
 ```
 
-If you are making use of `Downloader` in a widget, you must reconnect the session manually. Here's how:
+### Widget Support
+
+If you are making use of `Downloader` in a widget, you must reconnect the session as part of your `WidgetConfiguration`. Here's how:
 
 ```swift
 struct YourWidget: Widget {
