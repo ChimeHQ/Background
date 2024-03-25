@@ -93,6 +93,24 @@ Task<Void, Never> {
 }
 ```
 
+If you are making use of `Downloader` in a widget, you must reconnect the session manually. Here's how:
+
+```swift
+struct YourWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: kind, provider: provider) { entry in
+           YourWidgetView()
+        }
+        .onBackgroundURLSessionEvents { identifier, completion in
+            // find/create your downloader instance using the system-supplied
+            // identifier
+            let downloader = lookupDownloader(with: identifier)
+            
+            // and allow it to handle the events, possibly resulting in
+            // callbacks and/or async functions completing
+            downloader.handleBackgroundSessionEvents(completion)
+        }
+```
 
 ## Contributing and Collaboration
 
