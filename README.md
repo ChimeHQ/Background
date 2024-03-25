@@ -117,6 +117,8 @@ struct YourWidget: Widget {
             // callbacks and/or async functions completing
             downloader.handleBackgroundSessionEvents(completion)
         }
+    }
+}
 ```
 
 ## Contributing and Collaboration
