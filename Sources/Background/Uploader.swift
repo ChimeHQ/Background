@@ -1,29 +1,6 @@
 import Foundation
 import OSLog
 
-/// Interface to long-running URLSessionTask objects.
-public struct BackgroundTaskConfiguration: Sendable {
-	public typealias IdentifierProvider = @Sendable (URLSessionTask) -> String?
-	public typealias PrepareTask = @Sendable (URLSessionTask, URLRequest, String) -> Void
-
-	public let getIdentifier: IdentifierProvider
-	public let prepareTask: PrepareTask
-
-	public init(
-		getIdentifier: @escaping IdentifierProvider,
-		prepareTask: @escaping PrepareTask = { _, _, _ in }
-	) {
-		self.getIdentifier = getIdentifier
-		self.prepareTask = prepareTask
-	}
-
-	/// Stores a persistent identifier within the `URLSessionTask`'s `taskDescription` property.
-	public static let taskDescriptionCoder = BackgroundTaskConfiguration(
-		getIdentifier: { $0.taskDescription },
-		prepareTask: { $0.taskDescription = $2 }
-	)
-}
-
 /// Manages background uploads
 public actor Uploader {
 	public typealias Identifier = String
@@ -38,12 +15,14 @@ public actor Uploader {
 		sessionConfiguration: URLSessionConfiguration,
 		taskConfiguration: BackgroundTaskConfiguration = BackgroundTaskConfiguration.taskDescriptionCoder
 	) {
-		let proxy = URLSessionDelegateProxy()
+		let proxy = URLSessionDelegateAdapter()
 
 		self.taskInterface = taskConfiguration
 		self.session = URLSession(configuration: sessionConfiguration, delegate: proxy, delegateQueue: nil)
 
-		proxy.taskCompletedHandler = { task, error in
+		proxy.taskCompletedHandler = { [weak self] task, error in
+			guard let self else { return }
+
 			Task {
 				await self.taskFinished(task, with: error)
 			}
@@ -62,16 +41,9 @@ public actor Uploader {
 		)
 	}
 
-	private var activeTasks: Set<String> {
+	private var activeIdentifiers: Set<String> {
 		get async {
-            // force a turn of the main runloop, which I have found to sometimes be necessary for this to actually work
-            await withCheckedContinuation { continuation in
-                DispatchQueue.main.async {
-                    continuation.resume()
-                }
-            }
-
-			let (_, uploadTasks, _) = await session.tasks
+			let (_, uploadTasks, _) = await session.tasksWhenAvailable
 			let ids = uploadTasks.compactMap { taskInterface.getIdentifier($0) }
 
 			return Set(ids)
@@ -98,7 +70,7 @@ extension Uploader {
 		handlers[identifier] = handler
 
 		Task<Void, Never> {
-			let ids = await self.activeTasks
+			let ids = await self.activeIdentifiers
 
 			if ids.contains(identifier) {
 				logger.debug("found existing task for \(identifier, privacy: .public)")
@@ -133,12 +105,12 @@ extension Uploader {
 		}
 	}
 
-    /// Start the upload task and return a NetworkResponse when complete.
+	/// Start an upload task and return a NetworkResponse when complete.
 	public func networkResponse(
 		from request: URLRequest,
 		uploading url: URL,
 		with identifier: String
-	) async -> NetworkResponse {
+	) async -> NetworkResponse<Void> {
 		do {
 			let response = try await uploadFile(at: url, with: request, identifier: identifier)
 

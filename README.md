@@ -26,7 +26,6 @@ Uploading files:
 
 ```swift
 import Foundation
-
 import Background
 
 let config = URLSessionConfiguration.background(withIdentifier: "com.my.background-id")
@@ -58,6 +57,42 @@ Task<Void, Never> {
     }
 }
 ```
+
+Downloading:
+
+```swift
+import Foundation
+import Background
+
+let config = URLSessionConfiguration.background(withIdentifier: "com.my.background-id")
+let downloader = Downloader(sessionConfiguration: config)
+
+let request = URLRequest(url: URL(string: "https://myurl")!)
+let identifier = "some-stable-id-appropriate-for-the-file"
+
+Task<Void, Never> {
+	// remember, this await may not return during the processes entire lifecycle!
+	let response = await downloader.networkResponse(from: request, with: identifier)
+
+	switch response {
+	case .rejected:
+		// the server did not like the request
+		break
+	case let .retry(urlResponse):
+		let interval = urlResponse.retryAfterInterval ?? 60.0
+
+		// transient failure, could retry with interval if that makes sense
+		break
+	case let .failed(error):
+		// failed and a retry is unlikely to succeed
+		break
+	case let .success(url, urlResponse):
+		// download completed successfully at url
+		break
+	}
+}
+```
+
 
 ## Contributing and Collaboration
 

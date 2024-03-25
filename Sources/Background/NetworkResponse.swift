@@ -8,14 +8,17 @@ public enum NetworkResponseError: Error {
 	case requestInvalid
 	case missingOriginalRequest
 	case transientFailure(TimeInterval?)
+	case expectedContentMissing
 }
 
-public enum NetworkResponse: Sendable {
+public enum NetworkResponse<Value>  {
 	case failed(NetworkResponseError)
 	case rejected
 	case retry(HTTPURLResponse)
-	case success(HTTPURLResponse)
+	case success(Value, HTTPURLResponse)
 }
+
+extension NetworkResponse : Sendable where Value : Sendable {}
 
 extension NetworkResponse: CustomStringConvertible {
 	public var description: String {
@@ -23,25 +26,25 @@ extension NetworkResponse: CustomStringConvertible {
 		case .failed(let e): return "failed (\(e))"
 		case .rejected: return "rejected"
 		case .retry: return "retry"
-		case let .success(response): return "success (\(response.statusCode))"
+		case let .success(value, response): return "success (\(response.statusCode)) \(value)"
 		}
 	}
 }
 
 extension NetworkResponse {
-	public init(response: URLResponse?, error: Error? = nil) {
+	public init(response: URLResponse?, error: Error? = nil, value: Value?) {
 		if let e = error {
-			self = NetworkResponse.failed(NetworkResponseError.protocolError(e))
+			self = .failed(NetworkResponseError.protocolError(e))
 			return
 		}
 
 		guard let response = response else {
-			self = NetworkResponse.failed(NetworkResponseError.noResponseOrError)
+			self = .failed(NetworkResponseError.noResponseOrError)
 			return
 		}
 
 		guard let httpResponse = response as? HTTPURLResponse else {
-			self = NetworkResponse.failed(NetworkResponseError.noHTTPResponse(response))
+			self = .failed(NetworkResponseError.noHTTPResponse(response))
 			return
 		}
 
@@ -51,25 +54,22 @@ extension NetworkResponse {
 		case 0..<200:
 			self = NetworkResponse.failed(NetworkResponseError.httpReponseInvalid)
 		case 200, 201, 202, 204:
-			self = NetworkResponse.success(httpResponse)
+			if let value = value {
+				self = .success(value, httpResponse)
+			} else {
+				self = .failed(NetworkResponseError.expectedContentMissing)
+			}
 		case 408, 429, 500, 502, 503, 504:
 			self = NetworkResponse.retry(httpResponse)
 		default:
 			self = NetworkResponse.rejected
 		}
 	}
+}
 
-	public init(task: URLSessionTask, error: Error? = nil) {
-		self.init(response: task.response, error: error)
-	}
-
-	public init(with result: Result<URLResponse, Error>) {
-		switch result {
-		case let .success(response):
-			self.init(response: response, error: nil)
-		case let .failure(error):
-			self.init(response: nil, error: error)
-		}
+extension NetworkResponse where Value == Void {
+	public init(response: URLResponse?, error: Error? = nil) {
+		self.init(response: response, error: error, value: ())
 	}
 }
 
@@ -82,5 +82,37 @@ extension URLResponse {
 
 			return httpResp
 		}
+	}
+}
+
+import Foundation
+
+import Background
+
+let config = URLSessionConfiguration.background(withIdentifier: "com.my.background-id")
+let downloader = Downloader(sessionConfiguration: config)
+
+let request = URLRequest(url: URL(string: "https://myurl")!)
+let identifier = "some-stable-id-appropriate-for-the-file"
+
+Task<Void, Never> {
+	// remember, this await may not return during the processes entire lifecycle!
+	let response = await downloader.networkResponse(from: request, with: identifier)
+
+	switch response {
+	case .rejected:
+		// the server did not like the request
+		break
+	case let .retry(urlResponse):
+		let interval = urlResponse.retryAfterInterval ?? 60.0
+
+		// transient failure, could retry with interval if that makes sense
+		break
+	case let .failed(error):
+		// failed and a retry is unlikely to succeed
+		break
+	case let .success(url, urlResponse):
+		// download completed successfully at url
+		break
 	}
 }
