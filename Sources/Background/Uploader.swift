@@ -15,16 +15,21 @@ public actor Uploader {
 		sessionConfiguration: URLSessionConfiguration,
 		taskConfiguration: BackgroundTaskConfiguration = BackgroundTaskConfiguration.taskDescriptionCoder
 	) {
-		let proxy = URLSessionDelegateAdapter()
+		let adapter = URLSessionDelegateAdapter()
 
 		self.taskInterface = taskConfiguration
-		self.session = URLSession(configuration: sessionConfiguration, delegate: proxy, delegateQueue: nil)
+		self.session = URLSession(configuration: sessionConfiguration, delegate: adapter, delegateQueue: nil)
 
-		proxy.taskCompletedHandler = { [weak self] task, error in
-			guard let self else { return }
+		Task { [weak self] in
+			for await event in adapter.eventStream {
+				guard let self else { break }
 
-			Task {
-				await self.taskFinished(task, with: error)
+				switch event {
+				case let .taskComplete(task, error):
+					await self.taskFinished(task, with: error)
+				case .didFinishEvents, .downloadFinished:
+					break
+				}
 			}
 		}
 	}
@@ -39,6 +44,10 @@ public actor Uploader {
 				getIdentifier: identifierProvider
 			)
 		)
+	}
+
+	deinit {
+		session.invalidateAndCancel()
 	}
 
 	private var activeIdentifiers: Set<String> {

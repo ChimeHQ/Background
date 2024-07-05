@@ -22,30 +22,25 @@ public actor Downloader {
         self.taskInterface = taskConfiguration
         self.session = URLSession(configuration: sessionConfiguration, delegate: adapter, delegateQueue: nil)
 
-        adapter.finishHandler = { [weak self] in
-            guard let self else { return }
-            
-            Task {
-                await self.finishedEvents()
-            }
-        }
+		Task { [weak self] in
+			for await event in adapter.eventStream {
+				guard let self else { break }
 
-        adapter.taskCompletedHandler = { [weak self] task, error in
-			guard let self else { return }
-
-            Task {
-				await self.taskFinished(task, with: error, url: nil)
-            }
-        }
-
-		adapter.downloadFinishedHandler = { [weak self] task, url in
-			guard let self else { return }
-
-			Task {
-				await self.taskFinished(task, with: nil, url: url)
+				switch event {
+				case .didFinishEvents:
+					await self.finishedEvents()
+				case let .taskComplete(task, error):
+					await self.taskFinished(task, with: error, url: nil)
+				case let .downloadFinished(task, url):
+					await self.taskFinished(task, with: nil, url: url)
+				}
 			}
 		}
     }
+
+	deinit {
+		session.invalidateAndCancel()
+	}
 
     public init(
         sessionConfiguration: URLSessionConfiguration,

@@ -2,28 +2,34 @@ import Foundation
 
 /// Intermediate object to use an actor type as a URLSessionDelegate
 final class URLSessionDelegateAdapter: NSObject {
-    typealias TaskCompletionHandler = (URLSessionTask, Error?) -> Void
+	enum Event: Sendable {
+		case didFinishEvents
+		case taskComplete(URLSessionTask, Error?)
+		case downloadFinished(URLSessionDownloadTask, URL)
+	}
 
-	var finishHandler: () -> Void = {}
-	var taskCompletedHandler: TaskCompletionHandler = { _, _ in }
-	var downloadFinishedHandler: (URLSessionDownloadTask, URL) -> Void = {_, _ in }
+	private let streamPair = AsyncStream<Event>.makeStream()
+
+	public var eventStream: AsyncStream<Event> {
+		streamPair.0
+	}
 }
 
 extension URLSessionDelegateAdapter: URLSessionDelegate {
 	func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
-		finishHandler()
+		streamPair.1.yield(.didFinishEvents)
 	}
 }
 
 extension URLSessionDelegateAdapter: URLSessionTaskDelegate {
 	func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-		taskCompletedHandler(task, error)
+		streamPair.1.yield(.taskComplete(task, error))
 	}
 }
 
 extension URLSessionDelegateAdapter: URLSessionDownloadDelegate {
 	func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
-		downloadFinishedHandler(downloadTask, location)
+		streamPair.1.yield(.downloadFinished(downloadTask, location))
 	}
 }
 
