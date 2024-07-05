@@ -71,6 +71,15 @@ extension NetworkResponse where Value == Void {
 	public init(response: URLResponse?, error: Error? = nil) {
 		self.init(response: response, error: error, value: ())
 	}
+
+	public init(with result: Result<URLResponse, Error>) {
+		switch result {
+		case let .success(response):
+			self.init(response: response, error: nil)
+		case let .failure(error):
+			self.init(response: nil, error: error)
+		}
+	}
 }
 
 extension URLResponse {
