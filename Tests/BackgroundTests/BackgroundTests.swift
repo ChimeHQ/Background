@@ -13,7 +13,7 @@ struct BackgroundTests {
 			
 		}
 		
-#if os(macOS)
+#if os(macOS) && !targetEnvironment(macCatalyst)
 		try scheduler.submit(request)
 #else
 		// we know this will throw because we will not have the correct plist entries during testing
