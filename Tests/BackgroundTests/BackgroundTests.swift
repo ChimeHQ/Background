@@ -1,6 +1,7 @@
 import Testing
 @testable import Background
 
+#if os(macOS) || os(iOS) || os(tvOS) || os(visionOS)
 struct BackgroundTests {
 	@Test func registerAndSubmitProcessingTask() throws {
 		let identifier = "test-processing-task"
@@ -17,3 +18,4 @@ struct BackgroundTests {
 		try scheduler.submit(request)
 	}
 }
+#endif

@@ -89,7 +89,7 @@ struct ProcessingTaskRequest: BackgroundTaskRequest {
 	}
 }
 
-#if os(iOS) || os(tvOS) || os(visionOS) || os(watchOS)
+#if os(iOS) || os(tvOS) || os(visionOS)
 final class TaskScheduler: Sendable {
 	public static let shared = TaskScheduler()
 
@@ -123,7 +123,9 @@ final class TaskScheduler: Sendable {
 #endif
 	}
 }
+#endif
 
+#if os(iOS) || os(tvOS) || os(visionOS)
 extension BGTaskScheduler {
 	public func register(
 		forTaskWithIdentifier identifier: String,
