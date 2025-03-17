@@ -1,12 +1,16 @@
-import XCTest
+import Testing
 @testable import Background
 
-final class BackgroundTests: XCTestCase {
-    func testExample() throws {
-        // XCTest Documentation
-        // https://developer.apple.com/documentation/xctest
-
-        // Defining Test Cases and Test Methods
-        // https://developer.apple.com/documentation/xctest/defining_test_cases_and_test_methods
-    }
+struct BackgroundTests {
+	@Test func testExample() throws {
+		let request = ProcessingTaskRequest(identifier: "abc")
+		
+		let scheduler = TaskScheduler.shared
+		
+		_ = scheduler.register(forTaskWithIdentifier: "abc") { task in
+			
+		}
+		
+		try scheduler.submit(request)
+	}
 }

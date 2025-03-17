@@ -20,7 +20,7 @@ dependencies: [
 
 ## Concept
 
-[`URLSession`](https://developer.apple.com/documentation/foundation/urlsession)'s background upload and download facilities are relatively straightforward to get started with. But, they are surprisingly difficult to manage. The core challange is an operation could start and/or complete while your process isn't even running. You cannot just wait for a completion handler or `await` call. This usually means you have to involve peristent storage to juggle state across process launches.
+[`URLSession`](https://developer.apple.com/documentation/foundation/urlsession)'s background upload and download facilities are relatively straightforward to get started with. But, they are surprisingly difficult to manage. The core challenge is an operation could start and/or complete while your process isn't even running. You cannot just wait for a completion handler or `await` call. This usually means you have to involve persistent storage to juggle state across process launches.
 
 You also typically need to make use of system-provided API to reconnect your session to any work that has happened between launches. This can be done a few different ways, depending on your type of project and how you'd like your system to work.
 
@@ -124,6 +124,12 @@ struct YourWidget: Widget {
     }
 }
 ```
+
+### Background Tasks
+
+It's disappointing that the [BackgroundTasks](https://developer.apple.com/documentation/backgroundtasks) framework isn't available for macOS. The library includes some preliminary work to build a nearly source-compatible version of `BGTaskScheduler` that works across all platforms. As of right now, these types aren't public because the work isn't complete.
+
+The macOS implementation is build around [NSBackgroundActivityScheduler](https://developer.apple.com/documentation/foundation/nsbackgroundactivityscheduler), which works very differently internally.
 
 ### More Complex Usage
 
