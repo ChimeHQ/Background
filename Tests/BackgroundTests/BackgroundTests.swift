@@ -4,23 +4,24 @@ import Testing
 #if os(iOS) || os(tvOS) || os(visionOS) || os(macOS)
 struct BackgroundTests {
 	@Test func registerAndSubmitProcessingTask() throws {
-		let identifier = "abc"
+		let identifier = "test-processing-task"
 		let request = ProcessingTaskRequest(identifier: identifier)
 		
 		let scheduler = TaskScheduler.shared
 		
-		_ = scheduler.register(forTaskWithIdentifier: identifier) { task in
+		let registered = scheduler.register(forTaskWithIdentifier: identifier) { task in
 			
 		}
 		
-#if os(macOS) && !targetEnvironment(macCatalyst)
-		try scheduler.submit(request)
-#else
-		// we know this will throw because we will not have the correct plist entries during testing
-		#expect(throws: (any Error).self) {
-			try scheduler.submit(request)
-		}
+		// We know that on iOS (non-Catalyst) platforms, the identifier must be in the
+		// target's Info.plist for this registration to succeed.
+#if os(macOS) || targetEnvironment(macCatalyst)
+		#expect(registered)
 #endif
+		
+		guard registered else { return }
+		
+		try scheduler.submit(request)
 	}
 }
 #endif
