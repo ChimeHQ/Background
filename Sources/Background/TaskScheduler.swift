@@ -122,8 +122,9 @@ extension BGTaskScheduler {
 		register(forTaskWithIdentifier: identifier, using: nil, launchHandler: launchHandler)
 	}
 }
+#endif
 
-#else
+#if os(macOS)
 final class TaskScheduler: @unchecked Sendable {
 	public static let shared = TaskScheduler()
 	
@@ -157,5 +158,4 @@ final class TaskScheduler: @unchecked Sendable {
 		return true
 	}
 }
-
 #endif
