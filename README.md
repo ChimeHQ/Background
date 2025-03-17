@@ -127,9 +127,11 @@ struct YourWidget: Widget {
 
 ### Background Tasks
 
-It's disappointing that the [BackgroundTasks](https://developer.apple.com/documentation/backgroundtasks) framework isn't available for macOS. The library includes some preliminary work to build a nearly source-compatible version of `BGTaskScheduler` that works across all platforms. As of right now, these types aren't public because the work isn't complete.
+It's disappointing that the [BackgroundTasks](https://developer.apple.com/documentation/backgroundtasks) framework isn't available for macOS. The library includes some preliminary work to build a nearly source-compatible version of `BGTaskScheduler` that works across all platforms. This replacement also permits unconditional use in the simulator, which makes it more convenient. Actual background work will still only take place on real devices.
 
 The macOS implementation is build around [NSBackgroundActivityScheduler](https://developer.apple.com/documentation/foundation/nsbackgroundactivityscheduler), which works very differently internally.
+
+As of right now, these types aren't public because the work isn't complete.
 
 ### More Complex Usage
 

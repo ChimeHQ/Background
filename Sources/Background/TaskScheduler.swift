@@ -8,8 +8,9 @@ protocol BackgroundTaskRequest: Hashable {
 	var earliestBeginDate: Date? { get }
 }
 
-enum BackgroundTaskError: Error {
-	case unsupportedTaskRequest
+enum TaskSchedulerError: Error {
+	case unsupportedRequest
+	case notSupported
 }
 
 #if os(iOS) || os(tvOS) || os(visionOS)
@@ -53,7 +54,7 @@ extension BackgroundTaskRequest {
 				
 				return request
 			default:
-				throw BackgroundTaskError.unsupportedTaskRequest
+				throw TaskSchedulerError.unsupportedRequest
 			}
 		}
 	}
@@ -88,7 +89,7 @@ struct ProcessingTaskRequest: BackgroundTaskRequest {
 	}
 }
 
-#if os(iOS) || os(tvOS) || os(visionOS)
+#if os(iOS) || os(tvOS) || os(visionOS) || os(watchOS)
 final class TaskScheduler: Sendable {
 	public static let shared = TaskScheduler()
 
@@ -96,9 +97,13 @@ final class TaskScheduler: Sendable {
 	}
 	
 	public func submit(_ task: any BackgroundTaskRequest) throws {
+#if targetEnvironment(simulator)
+		return
+#else
 		let bgTaskRequest = try task.bgTaskRequest
 		
 		try BGTaskScheduler.shared.submit(bgTaskRequest)
+#endif
 	}
 	
 	public func register(
@@ -106,11 +111,16 @@ final class TaskScheduler: Sendable {
 		using queue: dispatch_queue_t? = nil,
 		launchHandler: @escaping @Sendable (BackgroundTask) -> Void
 	) -> Bool {
+#if targetEnvironment(simulator)
+		return true
+#else
+		
 		BGTaskScheduler.shared.register(forTaskWithIdentifier: identifier, using: queue) { @Sendable bgTask in
 			let task = BackgroundTask(bgTask)
 			
 			launchHandler(task)
 		}
+#endif
 	}
 }
 
@@ -143,7 +153,9 @@ final class TaskScheduler: @unchecked Sendable {
 	}
 	
 	public func submit<T: BackgroundTaskRequest>(_ task: T) throws {
-		requests[task.identifier] = task
+		lock.withLock {
+			requests[task.identifier] = task
+		}
 	}
 	
 	public func register(
@@ -153,7 +165,9 @@ final class TaskScheduler: @unchecked Sendable {
 	) -> Bool {
 		let registration = HandlerRegistration(handler: launchHandler, identifier: identifier, queue: queue)
 		
-		registrations[identifier] = registration
+		lock.withLock {
+			registrations[identifier] = registration
+		}
 		
 		return true
 	}
